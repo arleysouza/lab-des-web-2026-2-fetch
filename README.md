@@ -138,11 +138,3 @@ Em caso de erro, a action retorna uma mensagem ao formulário. No sucesso, `reva
 `loading.tsx` fornece o conteúdo de espera por meio de uma fronteira de Suspense criada pelo Next.js. `error.tsx` apresenta falhas inesperadas de consulta e permite tentar novamente.
 
 Na consulta individual, o service converte HTTP 404 em `null`; a página chama `notFound()` para apresentar `not-found.tsx`. Lista vazia é tratada pela própria listagem. Os formulários exibem localmente os erros das alterações e desabilitam o botão durante o envio.
-
-## Roteiro da aula e exercícios
-
-Acompanhe primeiro o fluxo `app/alunos/page.tsx` → `services/students.ts`. Depois, explore a rota por RA, o carregamento, o registro inexistente e as falhas de consulta. Para as alterações, acompanhe componente de formulário → action → service.
-
-Os alunos devem implementar a gestão de cursos e matrículas seguindo essa organização. Cursos usam ID gerado no backend; matrículas usam dois identificadores e não possuem operação de atualização.
-
-O [README do frontend](front/README.md) detalha os endpoints, os conceitos do Next.js e os experimentos sugeridos.
