@@ -24,7 +24,10 @@ export async function getStudents(): Promise<Student[]> {
 }
 
 // Nas operações de escrita, a action verifica o status e apresenta a mensagem.
-export async function createStudent(ra: number, name: string): Promise<Response> {
+export async function createStudent(
+  ra: number,
+  name: string,
+): Promise<Response> {
   return fetch(apiUrl("/api/students"), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -33,7 +36,10 @@ export async function createStudent(ra: number, name: string): Promise<Response>
   });
 }
 
-export async function updateStudent(ra: number, name: string): Promise<Response> {
+export async function updateStudent(
+  ra: number,
+  name: string,
+): Promise<Response> {
   return fetch(apiUrl(`/api/students/${ra}`), {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },

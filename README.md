@@ -1,192 +1,148 @@
-﻿# Aula – API HTTP com recursos e princípios REST
+﻿# Aula 3 — Consulta de dados no Next.js
 
-## Descrição
+Projeto didático com frontend Next.js (App Router e TypeScript), API NestJS e banco PostgreSQL com Drizzle ORM. O frontend implementa a gestão de estudantes; cursos e matrículas estão disponíveis na API e ficam como exercícios para os alunos.
 
-Projeto didático para explorar a comunicação entre cliente e servidor por HTTP. A aplicação permite cadastrar alunos e disciplinas e registrar matrículas, usando uma API em NestJS com Drizzle ORM e PostgreSQL. Uma aplicação de página única (SPA), feita com HTML, CSS e JavaScript, permite enviar requisições e inspecionar as respostas no navegador.
+O frontend utiliza Server Components para consultar dados e Client Components para os formulários. As páginas são renderizadas pelo servidor Next.js, com navegação integrada pelo App Router. O processo Node.js do Next.js também executa as Server Actions e as chamadas à API.
 
-O exemplo demonstra recursos identificados por URLs, representações JSON, métodos HTTP, códigos de status, validação, integridade dos dados, requisições independentes e política de cache. A definição formal de REST também inclui hipermídia (HATEOAS), abordada como conceito na aula e não implementada neste exemplo.
+## Executar o projeto
 
-## Estrutura de pastas e arquivos
-
-```text
-.
-├── .env                           # Configuração utilizada na execução local do projeto
-├── .env.example                   # Modelo das variáveis de ambiente
-├── .gitignore                     # Arquivos ignorados pelo Git
-├── compose.yml                    # Serviços, portas, rede, volume e healthchecks
-├── README.md                      # Orientações para a aula
-├── database/                      # Banco de dados PostgreSQL
-│   ├── Dockerfile                 # Imagem com os scripts de inicialização
-│   ├── init.sql                   # Criação das tabelas e restrições
-│   └── seed.sql                   # 39 disciplinas, 3 alunos e 22 matrículas
-├── front/                         # Cliente HTTP de página única
-│   ├── Dockerfile                 # Imagem Nginx para servir a interface
-│   ├── nginx.conf                 # Arquivos estáticos e proxy de /api para o servidor
-│   ├── index.html                 # Estrutura da tela
-│   ├── style.css                  # Estilos e adaptação para telas menores
-│   └── app.js                     # Exemplos, envio via Fetch e exibição das respostas
-└── server/                        # API HTTP em NestJS
-    ├── Dockerfile                 # Compilação e imagem de execução em etapas
-    ├── package.json               # Dependências e comandos npm
-    ├── package-lock.json          # Versões das dependências
-    ├── nest-cli.json              # Configuração da CLI do NestJS
-    ├── tsconfig.json              # Configuração do TypeScript
-    ├── tsconfig.build.json        # Configuração da compilação
-    └── src/                       # Código-fonte da API
-        ├── main.ts                # Inicialização, validação, cache e encerramento
-        ├── app.module.ts          # Configuração do ambiente e registro dos módulos
-        ├── health.controller.ts   # GET /health para verificar a resposta da API
-        ├── database/              # Conexão compartilhada e identificação de erros SQL
-        │   ├── database.module.ts # Disponibiliza o serviço de banco
-        │   ├── database.service.ts # Pool de conexões e integração com Drizzle
-        │   ├── unique-violation.ts # Identifica violações de unicidade
-        │   └── foreign-key-violation.ts # Identifica violações de chave estrangeira
-        └── modules/               # Recursos da aplicação
-            ├── students/          # Alunos: controller, service, module, schema e DTOs
-            ├── courses/           # Disciplinas: controller, service, module, schema e DTOs
-            └── enrollments/       # Matrículas: controller, service, module, schema e DTO
-```
-
-Nos módulos de recursos, `*.controller.ts` define as rotas, `*.service.ts` executa as operações, `*.module.ts` registra os componentes, `*.schema.ts` representa as tabelas no Drizzle e `dto/` define os dados aceitos e suas validações.
-
-## Diagrama do banco de dados
-
-```mermaid
-erDiagram
-    students ||--o{ enrollments : possui
-    courses ||--o{ enrollments : recebe
-
-    students {
-        integer ra PK
-        varchar(100) name
-    }
-
-    courses {
-        serial id PK
-        varchar(100) name UK
-    }
-
-    enrollments {
-        integer student_ra PK, FK
-        integer course_id PK, FK
-        timestamptz enrolled_at
-    }
-```
-
-Um aluno pode ter várias matrículas, e uma disciplina pode receber vários alunos. A chave primária composta de `enrollments` impede matricular o mesmo aluno duas vezes na mesma disciplina. As chaves estrangeiras impedem referências inexistentes e a exclusão de alunos ou disciplinas com matrículas vinculadas. Nomes de alunos podem se repetir; nomes de disciplinas são únicos.
-
-O seed cadastra Ana Clara em 5 disciplinas, Bruno Henrique em 7 e Camila em 10. A data da matrícula é preenchida automaticamente pelo banco.
-
-## Como reproduzir o exemplo
-
-### 1. Preparar o ambiente
-
-Instale o Docker com suporte ao Docker Compose e mantenha o mecanismo Docker em execução. Execute os comandos na pasta que contém `compose.yml`. Não é necessário instalar Node.js ou PostgreSQL no computador para executar pelo Compose.
-
-Se ainda não houver um `.env`, copie o modelo. No PowerShell:
+Com Docker e Docker Compose disponíveis, copie o ambiente se ainda não existir:
 
 ```powershell
 Copy-Item .env.example .env
 ```
 
-No Bash:
+Na raiz do projeto:
 
-```bash
-cp .env.example .env
-```
-
-Confira as variáveis do `.env`:
-
-| Variável | Finalidade | Valor do modelo |
-| --- | --- | --- |
-| `DB_HOST` | Host do banco; no Compose, o servidor usa o serviço `database` | `database` |
-| `DB_PORT` | Porta interna do PostgreSQL | `5432` |
-| `DB_PORT_HOST` | Porta do banco publicada no computador | `5433` |
-| `DB_NAME` | Nome do banco | `postgres` |
-| `DB_USER` | Usuário do banco | `postgres` |
-| `DB_PASSWORD` | Senha do banco para o exemplo local | `postgres` |
-| `SERVER_PORT` | Porta interna da API | `3000` |
-| `SERVER_PORT_HOST` | Porta da API publicada no computador | `3002` |
-| `FRONT_PORT_HOST` | Porta da interface publicada no computador | `8080` |
-
-O sufixo `_HOST` identifica portas publicadas no computador. Mantenha `DB_PORT=5432`, pois o exemplo usa a porta padrão do PostgreSQL. O Compose traduz as credenciais `DB_*` para as variáveis `POSTGRES_*` exigidas pela imagem do banco.
-
-### 2. Construir e iniciar os contêineres
-
-```bash
+```powershell
 docker compose up -d --build
 ```
 
-Esse comando constrói as imagens, cria e inicia os contêineres. O servidor aguarda o banco ficar saudável; o frontend aguarda o healthcheck do servidor.
+O backend aguarda o banco ficar saudável e o frontend aguarda o healthcheck do backend.
 
-Se as imagens já foram construídas com `docker compose build`, use `docker compose up -d`.
+| Endereço padrão | Finalidade |
+| --- | --- |
+| http://localhost:8080/alunos | Frontend Next.js: gestão de estudantes. |
+| http://localhost:3002/api/students | Consulta direta à API de estudantes. |
+| http://localhost:3002/health | Verifica se a API responde; não consulta o banco. |
+| `localhost:5433` | Conexão externa com o PostgreSQL. |
 
-Confira o estado e acompanhe os logs:
+As portas publicadas são configuradas no `.env` por `FRONT_PORT_HOST`, `SERVER_PORT_HOST` e `DB_PORT_HOST`. As variáveis `DB_NAME`, `DB_USER` e `DB_PASSWORD` configuram o banco do exemplo; `SERVER_PORT` e `DB_PORT` definem as portas internas.
 
-```bash
+No Compose, o Next.js recebe `API_URL=http://server:${SERVER_PORT}`. As requisições ao NestJS partem do servidor Next.js pela rede interna do Docker. O frontend é servido por `next start`, sem Nginx ou proxy `/api` no frontend.
+
+Para acompanhar a execução e encerrar:
+
+```powershell
 docker compose ps
 docker compose logs -f server database front
 ```
 
-Use `Ctrl+C` para sair dos logs; os contêineres continuam em execução.
-
-### 3. Acessar a aplicação
-
-Com as portas do modelo:
-
-| Endereço | Finalidade |
-| --- | --- |
-| http://localhost:8080 | Interface do laboratório |
-| http://localhost:3002/api/students | Consulta direta à API |
-| http://localhost:3002/health | Verificação da API: retorna `{"status":"ok"}` |
-| `localhost:5433` | Conexão com o banco por uma ferramenta externa |
-
-O endpoint `/health` verifica se a API responde; ele não consulta o banco. Ajuste os endereços caso tenha alterado as portas no `.env`.
-
-O Nginx encaminha as chamadas `/api` da página para o NestJS pela rede do Compose. Mantenha o endereço base da tela como `http://localhost:8080`: assim, página e requisições usam a mesma origem. Abrir o HTML diretamente ou apontar para outra origem pode exigir configuração de CORS na API.
-
-### 4. Encerrar a execução
-
-```bash
+```powershell
 docker compose down
 ```
 
-O volume `aula3_database_data` preserva os dados. `init.sql` e `seed.sql` são executados, nessa ordem, apenas na primeira inicialização de um diretório de dados vazio. Reconstruir as imagens não reaplica esses scripts em um banco existente.
+O volume `aula3_database_data` preserva os dados. Os scripts `database/init.sql` e `database/seed.sql` são executados somente na primeira inicialização de um diretório de dados vazio.
 
-## Explicação sobre a tela
+Para desenvolver o frontend fora do Docker, use Node.js 24 e mantenha a API disponível:
 
-### Painel 01 — Requisição
+```powershell
+cd front
+npm install
+Copy-Item .env.example .env.local
+npm run dev
+```
 
-- **Exemplo de operação:** preenche o formulário com uma chamada de alunos, disciplinas ou matrículas. Há também exemplos de erros HTTP.
-- **Endereço base:** origem para a qual a chamada será enviada; por padrão, utiliza o endereço da própria página.
-- **Método:** escolhe `GET`, `POST`, `PATCH` ou `DELETE`.
-- **Caminho do recurso:** identifica a coleção ou o recurso, como `/api/students/2026001`.
-- **Corpo da requisição:** JSON enviado em `POST` e `PATCH`. O campo fica desabilitado para `GET` e `DELETE` neste cliente.
-- **Enviar requisição:** executa a chamada. JSON inválido é identificado antes do envio.
-- **Requisição preparada:** mostra método, URL e headers definidos pelo cliente. O navegador pode adicionar outros headers.
+Abra http://localhost:3001/alunos. Em `front/.env.local`, use `API_URL=http://localhost:3002` para a API publicada pelo Compose, ou `http://localhost:3000` para o NestJS iniciado diretamente na porta padrão.
 
-Selecionar um exemplo apenas preenche o formulário. A chamada acontece ao clicar em **Enviar requisição**. Operações `POST`, `PATCH` e `DELETE` alteram os dados reais do banco.
+## Serviços do backend
 
-### Painel 02 — Resposta
+Os endpoints recebem e devolvem JSON. Os parâmetros `:ra`, `:id`, `:studentRa` e `:courseId` devem ser substituídos pelos identificadores reais.
 
-- **Status HTTP:** apresenta o código retornado, destacando sucesso ou erro.
-- **Metadados:** mostram duração observada pelo cliente, quantidade de bytes do corpo recebido e URL final. O tamanho não representa todo o tráfego HTTP.
-- **Headers da resposta:** exibem os cabeçalhos acessíveis ao JavaScript, como `Content-Type` e `Cache-Control`.
-- **Corpo da resposta:** mostra o conteúdo recebido, formatando JSON para facilitar a leitura.
+| Recurso | Listar | Consultar um registro | Cadastrar | Atualizar | Remover |
+| --- | --- | --- | --- | --- | --- |
+| Estudantes | GET `/api/students` | GET `/api/students/:ra` | POST `/api/students` | PATCH `/api/students/:ra` | DELETE `/api/students/:ra` |
+| Cursos | GET `/api/courses` | GET `/api/courses/:id` | POST `/api/courses` | PATCH `/api/courses/:id` | DELETE `/api/courses/:id` |
+| Matrículas | GET `/api/enrollments` | GET `/api/enrollments/student/:studentRa/course/:courseId` | POST `/api/enrollments` | Não disponível | DELETE `/api/enrollments/student/:studentRa/course/:courseId` |
 
-As respostas da API incluem `Cache-Control: no-store`, orientando navegadores e proxies a não armazená-las. Os headers exibidos passam pelo proxy Nginx; headers restritos pelo navegador, como `Set-Cookie`, não ficam disponíveis via Fetch.
+| Cadastro | Corpo de exemplo | Dados retornados |
+| --- | --- | --- |
+| Estudante | `{ "ra": 123, "name": "Ana Silva" }` | `ra`, `name`. |
+| Curso | `{ "name": "Desenvolvimento Web" }` | `id` gerado pelo backend, `name`. |
+| Matrícula | `{ "studentRa": 123, "courseId": 1 }` | `studentRa`, `courseId`, `enrolledAt`. |
 
-Respostas `400`, `404` e `409` são respostas HTTP e aparecem com seus headers e corpo. Uma falha de conexão é apresentada separadamente, sem inventar um status HTTP. O cliente limita a espera a 15 segundos.
+A atualização de estudantes e cursos recebe `{ "name": "Novo nome" }`. O RA identifica o estudante e não é alterado. Os nomes devem ter entre 3 e 100 caracteres; o RA deve ser inteiro positivo. A matrícula usa uma chave composta pelo RA e pelo ID do curso.
 
-### Roteiro de teste na aula
+Listagens retornam arrays, inclusive `[]` quando não há registros. Cadastros retornam HTTP 201; consultas, atualizações e exclusões bem-sucedidas retornam 200. Exclusões retornam um objeto com `message`.
 
-1. Escolha **Alunos · listar** e envie a requisição. Observe o status `200`, os headers e o array JSON.
-2. Use **Alunos · criar** para cadastrar o RA `2026099`. Observe `201`. Reenvie a chamada para observar `409` por RA duplicado.
-3. Busque e atualize esse aluno. Consulte novamente para comparar a representação retornada.
-4. Crie uma disciplina e anote o `id` retornado. Substitua o ID `40` dos exemplos de atualização e exclusão pelo valor real: a sequência não garante esse número.
-5. Crie uma matrícula usando o RA do aluno e o ID da disciplina criada. Reenvie para observar `409` por matrícula duplicada.
-6. Tente excluir o aluno ou a disciplina enquanto a matrícula existe. Observe `409` por conflito com o vínculo.
-7. Exclua a matrícula e, em seguida, o aluno e a disciplina de teste.
-8. Experimente **Erro 400 · dados inválidos** e **Erro 404 · aluno inexistente**. Compare os corpos e headers com os das respostas de sucesso.
+Entradas inválidas geram 400; registros inexistentes, 404; conflitos, 409. Os conflitos incluem RA repetido, nome de curso repetido, matrícula duplicada e tentativa de remover um estudante ou curso com matrículas. Para cadastrar uma matrícula, estudante e curso precisam existir.
 
-Os exemplos baseados no seed pressupõem que seus registros ainda existem. Se o RA de teste já estiver cadastrado, use outro RA e ajuste as chamadas seguintes.
+Os controllers e DTOs em `server/src/modules/` são a referência do contrato da API. O frontend atual oferece telas somente para estudantes.
+
+## Arquitetura do frontend
+
+```text
+front/src/
+├── app/
+│   ├── layout.tsx               Documento HTML, cabeçalho e rodapé
+│   ├── page.tsx                 Redireciona / para /alunos
+│   ├── globals.css              Estilos compartilhados
+│   └── alunos/
+│       ├── layout.tsx           Renderização por requisição
+│       ├── page.tsx             Lista de estudantes
+│       ├── loading.tsx          Carregamento da seção
+│       ├── error.tsx            Falhas inesperadas de consulta
+│       ├── actions.ts           Validação, chamada ao service e redirecionamento
+│       ├── novo/page.tsx        Cadastro
+│       └── [ra]/
+│           ├── page.tsx         Detalhes por RA
+│           ├── not-found.tsx    Registro inexistente
+│           ├── editar/page.tsx  Edição
+│           └── remover/page.tsx Exclusão
+├── components/                  Formulários interativos
+├── services/students.ts         Os cinco fetch para a API de estudantes
+├── lib/validation.ts            Validação compartilhada de RA
+└── types/student.ts             Contrato TypeScript do estudante
+```
+
+### Rotas e layouts
+
+No App Router, as pastas dentro de `app` organizam as URLs e os arquivos `page.tsx` definem suas páginas. A pasta `[ra]` captura um parâmetro: em `/alunos/123`, `await params` permite obter o RA `123`.
+
+Os layouts envolvem as páginas com uma estrutura compartilhada. O layout principal contém o HTML e a navegação; o layout da seção de alunos declara `dynamic = "force-dynamic"`, mantendo a renderização por requisição. A API não precisa estar disponível durante o build dessa seção.
+
+### Consulta com Server Components
+
+As páginas são Server Components por padrão. A página de alunos é assíncrona: chama `getStudents()`, aguarda os dados e renderiza a lista. O navegador recebe o resultado da renderização, sem precisar executar um `useEffect` para consultar essa lista.
+
+```text
+Navegador → página no Next.js → service → API NestJS → PostgreSQL
+```
+
+O service usa `fetch`, verifica os resultados e mantém `API_URL` no servidor. O import `server-only` impede seu uso direto nos componentes do navegador. As consultas usam `cache: "no-store"` para buscar dados atuais a cada execução.
+
+### Interação com Client Components e Server Actions
+
+Os formulários possuem `"use client"` para usar `useState`, `onChange` e `onSubmit`. O estado guarda os valores digitados, as mensagens e o indicador de envio.
+
+As funções de `app/alunos/actions.ts` possuem `"use server"` e executam no servidor Next.js. O formulário chama a action; a action valida os argumentos e chama o service; o service envia POST, PATCH ou DELETE ao NestJS.
+
+```text
+Formulário no navegador → Server Action no Next.js → service → API NestJS
+```
+
+Em caso de erro, a action retorna uma mensagem ao formulário. No sucesso, `revalidatePath` invalida o conteúdo da seção e `redirect` encaminha para detalhes ou listagem. Essas funções ficam nas actions; o service concentra a comunicação HTTP.
+
+### Carregamento e erros
+
+`loading.tsx` fornece o conteúdo de espera por meio de uma fronteira de Suspense criada pelo Next.js. `error.tsx` apresenta falhas inesperadas de consulta e permite tentar novamente.
+
+Na consulta individual, o service converte HTTP 404 em `null`; a página chama `notFound()` para apresentar `not-found.tsx`. Lista vazia é tratada pela própria listagem. Os formulários exibem localmente os erros das alterações e desabilitam o botão durante o envio.
+
+## Roteiro da aula e exercícios
+
+Acompanhe primeiro o fluxo `app/alunos/page.tsx` → `services/students.ts`. Depois, explore a rota por RA, o carregamento, o registro inexistente e as falhas de consulta. Para as alterações, acompanhe componente de formulário → action → service.
+
+Os alunos devem implementar a gestão de cursos e matrículas seguindo essa organização. Cursos usam ID gerado no backend; matrículas usam dois identificadores e não possuem operação de atualização.
+
+O [README do frontend](front/README.md) detalha os endpoints, os conceitos do Next.js e os experimentos sugeridos.
